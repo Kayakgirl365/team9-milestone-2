@@ -9,7 +9,6 @@
 *  @author Matthew Ford
 */
 #include <Encoder.h>
-#include <Servo.h>
 #include "motor_control.h"
 #include "HUSKYLENS.h"
 
@@ -53,6 +52,4 @@ int main() {
       current_tag = (current_tag < 3) ? current_tag+1 : 1;
     }
   }
-
-  delay(1000);
 }
