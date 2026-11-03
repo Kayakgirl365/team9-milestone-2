@@ -55,9 +55,9 @@ int pointToTag(int tag_id) {
       return 1;
     } else {  // Tag not centered. Minor adjustment
       if (x < 160) {
-        rotateCCW(5);
+        rotateCCW(8);
       } else {
-        rotateCCW(-5);
+        rotateCCW(-8);
       }
       delay(100);
     }
