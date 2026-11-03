@@ -16,3 +16,7 @@ build/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Ignore my personal driving and motor control files
+motor_control.h
+driving.ino
