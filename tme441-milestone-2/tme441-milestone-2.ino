@@ -1,15 +1,19 @@
 
 /*
-  TME 441 - AC-Team 9
-  Milestone 2 - Motor Debug Test
+  TME 441 - Milestone 2
+  AC-Team 9
 
-  Test both motors individually.
-  Check whether the encoders detect movement.
+  Authors: Alex Brown, Danielle Platt, Nathan Huynh
 
-  Left motor: 2 seconds
-  Right motor: 2 seconds
+  Goal:
+  1. Find AprilTag 1 and drive toward it.
+  2. Stop near Tag 1.
+  3. Find and approach Tag 2.
+  4. Find and approach Tag 3.
+  5. Stop permanently.
 
-  Keep both wheels off the ground during testing.
+  Uses HuskyLens camera and PID motor control.
+  No ultrasonic sensor or dead reckoning.
 */
 
 #include <Encoder.h>
@@ -17,105 +21,143 @@
 #include <HUSKYLENS.h>
 #include <math.h>
 
-// Keep the camera object for the other Arduino tabs.
+// Create the HuskyLens camera object
 HUSKYLENS cam;
 
-// Keep this struct for camera.ino and navigation.ino.
+// Store the camera measurements for one tag
 struct TagPose {
-  int status;
-  float range;
-  float heading;
-  int xCenter;
-  int height;
+  int status;       // 1 = found, 0 = not found, -2 = error
+  float range;      // Estimated distance in cm
+  float heading;    // Angle toward tag in degrees
+  int xCenter;      // Tag's horizontal position
+  int height;       // Tag's height in pixels
 };
 
+// Functions defined in the other Arduino tabs
+TagPose rangeAndHeadingToTag(int tagID);
+float distanceFromFront(TagPose tag);
+int driveToTag(int tagID);
+bool driveDistance(float cm);
+bool rotateCCW(float degrees);
+
+
+// ====================================
+// SETUP - RUNS ONCE
+// ====================================
 
 void setup() {
 
-  // Start Serial Monitor.
+  // Start Serial Monitor at 9600 baud
   Serial.begin(9600);
-  delay(1000);
 
-  // Initialize motor pins.
+  // HuskyLens connected to Arduino Mega Serial3
+  // Camera TX -> Arduino pin 15
+  // Camera RX -> Arduino pin 14
+  Serial3.begin(9600);
+
+  // Initialize the motor pins
   initMotors();
 
-  // Make sure both motors start stopped.
+  // Make sure motors start stopped
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 
-  Serial.println("===== MOTOR TEST START =====");
-
-
-  // =====================================
-  // TEST 1: LEFT MOTOR
-  // =====================================
-
-  Serial.println("Testing LEFT motor");
-
-  // Save encoder position before moving.
-  long leftStart = enc_l.read();
-
-  // Run left motor at PWM 180.
-  motorOn(LMOTOR, 180);
-
-  // Run for 2 seconds.
-  delay(2000);
-
-  // Stop left motor.
-  motorHalt(LMOTOR);
-
-  // Calculate how many encoder ticks changed.
-  long leftTicks = enc_l.read() - leftStart;
-
-  Serial.print("LEFT encoder ticks: ");
-  Serial.println(leftTicks);
-
-  // Pause before testing right motor.
+  // Allow the camera to start
   delay(1000);
 
+  // Connect to HuskyLens
+  if (!cam.begin(Serial3)) {
 
-  // =====================================
-  // TEST 2: RIGHT MOTOR
-  // =====================================
+    Serial.println("ERROR: HuskyLens not connected");
 
-  Serial.println("Testing RIGHT motor");
+    // Do not move if camera connection fails
+    return;
+  }
 
-  // Save encoder position before moving.
-  long rightStart = enc_r.read();
+  Serial.println("HuskyLens connected!");
 
-  // Run right motor at PWM 180.
-  motorOn(RMOTOR, 180);
+  // Set camera to AprilTag recognition mode
+  cam.writeAlgorithm(ALGORITHM_TAG_RECOGNITION);
 
-  // Run for 2 seconds.
-  delay(2000);
+  delay(1000);
 
-  // Stop right motor.
-  motorHalt(RMOTOR);
+  // ====================================
+  // FIND TAGS 1, 2, AND 3
+  // ====================================
 
-  // Calculate encoder movement.
-  long rightTicks = enc_r.read() - rightStart;
+  for (int tagID = 1; tagID <= 3; tagID++) {
 
-  Serial.print("RIGHT encoder ticks: ");
-  Serial.println(rightTicks);
+    Serial.print("Searching for Tag ");
+    Serial.println(tagID);
 
+    // Search for the correct tag
+    // Rotate until detected
+    // Align using camera heading
+    // Drive toward the tag using encoder feedback
+    // Stop at the estimated target distance
+    int result = driveToTag(tagID);
 
-  // =====================================
-  // FINISH TEST
-  // =====================================
+    // Stop motors after each tag
+    motorHalt(LMOTOR);
+    motorHalt(RMOTOR);
 
-  // Stop both motors.
+    // Check if navigation succeeded
+    if (result != 1) {
+
+      Serial.print("Navigation failed: ");
+      Serial.println(result);
+
+      // Stop the entire mission if an error occurs
+      return;
+    }
+
+    Serial.print("Successfully reached Tag ");
+    Serial.println(tagID);
+
+    // Pause briefly at each tag
+    delay(500);
+
+    // After Tag 1 and Tag 2, back up 9 cm
+    // This provides room to rotate toward the next tag
+    // Make sure the space behind the robot is clear
+    if (tagID < 3) {
+
+      Serial.println("Backing away from tag");
+
+      // Negative distance means drive backward
+      if (!driveDistance(-9.0f)) {
+
+        Serial.println("ERROR: Reverse movement failed");
+
+        motorHalt(LMOTOR);
+        motorHalt(RMOTOR);
+
+        return;
+      }
+    }
+  }
+
+  // ====================================
+  // MISSION COMPLETE
+  // ====================================
+
+  // Stop permanently after Tag 3
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 
-  Serial.println("===== MOTOR TEST COMPLETE =====");
+  Serial.println("MILESTONE 2 COMPLETE!");
 }
 
+
+// ====================================
+// LOOP - DO NOT REPEAT THE MISSION
+// ====================================
 
 void loop() {
 
-  // Keep motors stopped after testing.
+  // Keep both motors stopped
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
+
+  // Do not restart the tag sequence
 }
-
-
