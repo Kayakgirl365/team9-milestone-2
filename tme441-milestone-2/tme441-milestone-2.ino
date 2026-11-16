@@ -45,8 +45,6 @@ const bool CAMERA_CALIBRATED = true;
 
 void setup() {
 
-void setup() {
-
   // Start Serial Monitor FIRST
   Serial.begin(9600);
   delay(1000);
