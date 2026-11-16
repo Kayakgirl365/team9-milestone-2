@@ -1,14 +1,15 @@
 
 /*
-  TME 441 - AC-Team 9 - Milestone 2
-  HuskyLens AprilTag Navigation
+  TME 441 - AC-Team 9
+  Milestone 2 - Motor Debug Test
 
-  Find Tag 1, then Tag 2, then Tag 3.
-  Stop near each tag using camera measurements.
-  Use motor encoders and PID for wheel movements.
+  Test both motors individually.
+  Check whether the encoders detect movement.
 
-  No ultrasonic sensor.
-  No dead reckoning extra labor.
+  Left motor: 2 seconds
+  Right motor: 2 seconds
+
+  Keep both wheels off the ground during testing.
 */
 
 #include <Encoder.h>
@@ -16,226 +17,105 @@
 #include <HUSKYLENS.h>
 #include <math.h>
 
-// HuskyLens uses Serial3 on the Arduino Mega.
+// Keep the camera object for the other Arduino tabs.
 HUSKYLENS cam;
 
-bool cameraReady = false;
-
-// Store range and heading from ONE camera image.
+// Keep this struct for camera.ino and navigation.ino.
 struct TagPose {
-  int status;       // 1 = found, 0 = not seen, -2 = camera error
-  float range;      // Distance from camera lens to tag, cm
-  float heading;    // Positive = left, negative = right
-  int xCenter;      // Horizontal position in the image
-  int height;       // Apparent tag height in pixels
+  int status;
+  float range;
+  float heading;
+  int xCenter;
+  int height;
 };
-
-// Functions in the other Arduino tabs.
-TagPose rangeAndHeadingToTag(int tagID);
-float distanceFromFront(TagPose tag);
-int driveToTag(int tagID);
-
-bool driveDistance(float centimeters);
-bool rotateCCW(float degrees);
-
-// Keep false until camera distance and angle
-// measurements have been calibrated and tested.
-const bool CAMERA_CALIBRATED = true;
 
 
 void setup() {
 
-  // Start Serial Monitor FIRST
+  // Start Serial Monitor.
   Serial.begin(9600);
   delay(1000);
 
-  // Set up motor pins
+  // Initialize motor pins.
   initMotors();
 
-  // Start with motors stopped
+  // Make sure both motors start stopped.
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 
-  Serial.println("Starting motor test");
+  Serial.println("===== MOTOR TEST START =====");
 
-  // ==========================
-  // TEST LEFT MOTOR
-  // ==========================
+
+  // =====================================
+  // TEST 1: LEFT MOTOR
+  // =====================================
 
   Serial.println("Testing LEFT motor");
 
+  // Save encoder position before moving.
   long leftStart = enc_l.read();
 
-  // Run left motor for 2 seconds
+  // Run left motor at PWM 180.
   motorOn(LMOTOR, 180);
+
+  // Run for 2 seconds.
   delay(2000);
 
-  // Stop left motor
+  // Stop left motor.
   motorHalt(LMOTOR);
 
-  Serial.print("Left encoder ticks: ");
-  Serial.println(enc_l.read() - leftStart);
+  // Calculate how many encoder ticks changed.
+  long leftTicks = enc_l.read() - leftStart;
 
+  Serial.print("LEFT encoder ticks: ");
+  Serial.println(leftTicks);
+
+  // Pause before testing right motor.
   delay(1000);
 
-  // ==========================
-  // TEST RIGHT MOTOR
-  // ==========================
+
+  // =====================================
+  // TEST 2: RIGHT MOTOR
+  // =====================================
 
   Serial.println("Testing RIGHT motor");
 
+  // Save encoder position before moving.
   long rightStart = enc_r.read();
 
-  // Run right motor for 2 seconds
+  // Run right motor at PWM 180.
   motorOn(RMOTOR, 180);
+
+  // Run for 2 seconds.
   delay(2000);
 
-  // Stop right motor
+  // Stop right motor.
   motorHalt(RMOTOR);
 
-  Serial.print("Right encoder ticks: ");
-  Serial.println(enc_r.read() - rightStart);
+  // Calculate encoder movement.
+  long rightTicks = enc_r.read() - rightStart;
 
-  Serial.println("Motor test complete");
+  Serial.print("RIGHT encoder ticks: ");
+  Serial.println(rightTicks);
 
-  // Stop here while debugging
-  return;
-  
-  // Your existing camera/navigation code below
-  // will not execute during this test.
-}
 
-  return;
+  // =====================================
+  // FINISH TEST
+  // =====================================
 
-  // Start computer and HuskyLens communication.
-  Serial.begin(9600);
-  Serial3.begin(9600);
-
-  // Set up the motor pins.
-  initMotors();
-
-  // Keep both motors stopped during startup.
+  // Stop both motors.
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 
-  delay(700);
-
-  // Check that HuskyLens is connected.
-  // Camera TX -> Mega pin 15
-  // Camera RX -> Mega pin 14
-  if (!cam.begin(Serial3)) {
-
-    Serial.println("HuskyLens connection failed");
-    return;
-  }
-
-  // Tell the camera to recognize learned AprilTags.
-  cam.writeAlgorithm(ALGORITHM_TAG_RECOGNITION);
-
-  cameraReady = true;
-  delay(700);
-
-  // Prevent autonomous motion before calibration.
-  if (!CAMERA_CALIBRATED) {
-
-    Serial.println("Calibration mode: robot will not move");
-    return;
-  }
-
-  // Visit tags 1, 2, and 3 in order.
-  for (int tagID = 1; tagID <= 3; tagID++) {
-
-    Serial.print("Searching for Tag ");
-    Serial.println(tagID);
-
-    // Search, aim, approach, and stop.
-    int result = driveToTag(tagID);
-
-    // Make sure both motors stop.
-    motorHalt(LMOTOR);
-    motorHalt(RMOTOR);
-
-    // Stop the mission if navigation fails.
-    if (result != 1) {
-
-      Serial.print("Navigation failed: ");
-      Serial.println(result);
-
-      return;
-    }
-
-    Serial.print("Estimated arrival at Tag ");
-    Serial.println(tagID);
-
-    delay(400);
-
-    // After Tags 1 and 2, back away before turning
-    // to find the next sign.
-    //
-    // IMPORTANT: Confirm space behind the robot is clear.
-    if (tagID < 3) {
-
-      if (!driveDistance(-9.0f)) {
-
-        Serial.println("Reverse movement failed");
-        return;
-      }
-    }
-  }
-
-  // Stop permanently after Tag 3.
-  motorHalt(LMOTOR);
-  motorHalt(RMOTOR);
-
-  Serial.println("Milestone 2 complete!");
+  Serial.println("===== MOTOR TEST COMPLETE =====");
 }
 
 
 void loop() {
 
-  // Never repeat the mission.
+  // Keep motors stopped after testing.
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
-
-  // When calibration is disabled, print the
-  // camera measurements without moving the robot.
-  if (!CAMERA_CALIBRATED && cameraReady) {
-
-    static unsigned long lastPrint = 0;
-
-    if (millis() - lastPrint >= 500) {
-
-      lastPrint = millis();
-
-      TagPose p = rangeAndHeadingToTag(1);
-
-      if (p.status == 1) {
-
-        Serial.print("x=");
-        Serial.print(p.xCenter);
-
-        Serial.print(" height=");
-        Serial.print(p.height);
-
-        Serial.print(" lens_cm=");
-        Serial.print(p.range);
-
-        Serial.print(" front_cm=");
-        Serial.print(distanceFromFront(p));
-
-        Serial.print(" heading_deg=");
-        Serial.println(p.heading);
-
-      } else if (p.status == 0) {
-
-        Serial.println("Tag 1 not visible");
-
-      } else {
-
-        Serial.println("HuskyLens communication error");
-      }
-    }
-  }
-
-  delay(100);
 }
+
+
