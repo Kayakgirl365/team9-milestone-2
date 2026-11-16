@@ -1,19 +1,26 @@
 
 /*
-  TME 441 - Milestone 2
+  TME 441 - Milestone 2 + Extra Labor
   AC-Team 9
 
-  Authors: Alex Brown, Danielle Platt, Nathan Huynh
+  DEAD RECKONING - OPTION 1
 
-  Goal:
-  1. Find AprilTag 1 and drive toward it.
-  2. Stop near Tag 1.
-  3. Find and approach Tag 2.
-  4. Find and approach Tag 3.
-  5. Stop permanently.
+  Mission:
+  1. Find and approach AprilTag 1.
+  2. Find and approach AprilTag 2.
+  3. Find and approach AprilTag 3.
+  4. Continuously track X, Y, and heading.
+  5. Return to starting position.
+  6. Face the original starting direction.
+  7. Stop permanently.
 
-  Uses HuskyLens camera and PID motor control.
-  No ultrasonic sensor or dead reckoning.
+  Hardware:
+  - Arduino Mega
+  - HuskyLens camera
+  - Two DC motors with encoders
+  - Dr. Ford's PID motor controller
+
+  No ultrasonic sensor.
 */
 
 #include <Encoder.h>
@@ -21,68 +28,176 @@
 #include <HUSKYLENS.h>
 #include <math.h>
 
-// Create the HuskyLens camera object
+
+// ====================================
+// CAMERA
+// ====================================
+
+// HuskyLens connected through Serial3
 HUSKYLENS cam;
-
-// Store the camera measurements for one tag
-struct TagPose {
-  int status;       // 1 = found, 0 = not found, -2 = error
-  float range;      // Estimated distance in cm
-  float heading;    // Angle toward tag in degrees
-  int xCenter;      // Tag's horizontal position
-  int height;       // Tag's height in pixels
-};
-
-// Functions defined in the other Arduino tabs
-TagPose rangeAndHeadingToTag(int tagID);
-float distanceFromFront(TagPose tag);
-int driveToTag(int tagID);
-bool driveDistance(float cm);
-bool rotateCCW(float degrees);
 
 
 // ====================================
-// SETUP - RUNS ONCE
+// APRILTAG DATA STRUCTURE
+// ====================================
+
+// Holds range and heading calculated
+// from the same camera image.
+struct TagPose {
+
+  int status;       // 1 = found, 0 = not found, -2 = error
+
+  float range;      // Distance from camera to tag (cm)
+
+  float heading;    // Direction to tag (degrees)
+
+  int xCenter;      // Tag position in camera image
+
+  int height;       // Tag height in pixels
+};
+
+
+// ====================================
+// FUNCTION DECLARATIONS
+// ====================================
+
+// Camera functions
+TagPose rangeAndHeadingToTag(int tagID);
+float distanceFromFront(TagPose p);
+
+// Navigation
+int driveToTag(int tagID);
+
+// Driving
+bool driveDistance(float centimeters);
+bool rotateCCW(float degrees);
+void stopDriving();
+
+// Dead reckoning
+void resetOdometry();
+void updateOdometry();
+void printPose();
+bool returnHome();
+
+
+// ====================================
+// TEST MODE
+// ====================================
+
+// TRUE = Test dead reckoning without tags
+// FALSE = Full Milestone 2 and return home
+
+const bool ODOMETRY_TEST_MODE = true;
+
+
+// ====================================
+// SETUP
 // ====================================
 
 void setup() {
 
-  // Start Serial Monitor at 9600 baud
+  // Computer Serial Monitor
   Serial.begin(9600);
 
-  // HuskyLens connected to Arduino Mega Serial3
-  // Camera TX -> Arduino pin 15
-  // Camera RX -> Arduino pin 14
+  // HuskyLens communication
+  // Camera TX -> Mega pin 15
+  // Camera RX -> Mega pin 14
   Serial3.begin(9600);
 
-  // Initialize the motor pins
+  // Initialize Dr. Ford's motor controller
   initMotors();
 
-  // Make sure motors start stopped
+  // Start with both motors stopped
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 
-  // Allow the camera to start
-  delay(1000);
+  delay(700);
 
-  // Connect to HuskyLens
+
+  // ====================================
+  // INITIALIZE DEAD RECKONING
+  // ====================================
+
+  // The starting position becomes:
+  //
+  // X = 0 cm
+  // Y = 0 cm
+  // Heading = 0 degrees
+
+  resetOdometry();
+
+  Serial.println("Dead reckoning initialized");
+
+  printPose();
+
+
+  // ====================================
+  // DEAD RECKONING TEST MODE
+  // ====================================
+
+  if (ODOMETRY_TEST_MODE) {
+
+    Serial.println("Starting odometry test");
+
+    // Drive forward 30 cm
+    bool success = driveDistance(30.0f);
+
+    // Turn left 90 degrees
+    if (success) {
+      success = rotateCCW(90.0f);
+    }
+
+    // Drive forward another 30 cm
+    if (success) {
+      success = driveDistance(30.0f);
+    }
+
+    // Display estimated position
+    printPose();
+
+    // Return to original location and heading
+    if (success) {
+
+      Serial.println("Returning to starting position");
+
+      success = returnHome();
+    }
+
+    stopDriving();
+
+    if (success) {
+      Serial.println("ODOMETRY TEST COMPLETE");
+    } else {
+      Serial.println("ODOMETRY TEST FAILED");
+    }
+
+    // Do not run tag navigation in test mode
+    return;
+  }
+
+
+  // ====================================
+  // CONNECT HUSKYLENS
+  // ====================================
+
   if (!cam.begin(Serial3)) {
 
     Serial.println("ERROR: HuskyLens not connected");
 
-    // Do not move if camera connection fails
+    stopDriving();
     return;
   }
 
-  Serial.println("HuskyLens connected!");
+  Serial.println("HuskyLens connected");
 
-  // Set camera to AprilTag recognition mode
+  // Select AprilTag recognition mode
   cam.writeAlgorithm(ALGORITHM_TAG_RECOGNITION);
 
-  delay(1000);
+  delay(700);
+
 
   // ====================================
-  // FIND TAGS 1, 2, AND 3
+  // MILESTONE 2 - FIND TAGS 1, 2, 3
   // ====================================
 
   for (int tagID = 1; tagID <= 3; tagID++) {
@@ -90,74 +205,126 @@ void setup() {
     Serial.print("Searching for Tag ");
     Serial.println(tagID);
 
-    // Search for the correct tag
-    // Rotate until detected
-    // Align using camera heading
-    // Drive toward the tag using encoder feedback
-    // Stop at the estimated target distance
+    // Uses the team's navigation.ino
+    //
+    // 1. Search for the tag
+    // 2. Measure range and heading
+    // 3. Turn toward the tag
+    // 4. Drive calculated distance once
+    // 5. Stop at estimated target location
+
     int result = driveToTag(tagID);
 
-    // Stop motors after each tag
-    motorHalt(LMOTOR);
-    motorHalt(RMOTOR);
+    // Stop after approaching each tag
+    stopDriving();
 
-    // Check if navigation succeeded
+    // Display updated X, Y, and heading
+    printPose();
+
+
+    // ====================================
+    // CHECK NAVIGATION RESULT
+    // ====================================
+
     if (result != 1) {
 
       Serial.print("Navigation failed: ");
       Serial.println(result);
 
-      // Stop the entire mission if an error occurs
+      // Do not continue after a failure
       return;
     }
 
     Serial.print("Successfully reached Tag ");
     Serial.println(tagID);
 
-    // Pause briefly at each tag
     delay(500);
 
-    // After Tag 1 and Tag 2, back up 9 cm
-    // This provides room to rotate toward the next tag
-    // Make sure the space behind the robot is clear
+
+    // ====================================
+    // BACK AWAY AFTER TAGS 1 AND 2
+    // ====================================
+
+    // Give robot space to rotate toward
+    // the next tag.
+
     if (tagID < 3) {
 
-      Serial.println("Backing away from tag");
+      Serial.println("Backing away 9 cm");
 
-      // Negative distance means drive backward
       if (!driveDistance(-9.0f)) {
 
         Serial.println("ERROR: Reverse movement failed");
 
-        motorHalt(LMOTOR);
-        motorHalt(RMOTOR);
-
+        stopDriving();
         return;
       }
     }
   }
 
+
+  // ====================================
+  // EXTRA LABOR - RETURN HOME
+  // ====================================
+
+  Serial.println("All three tags completed!");
+
+  // Display location after Tag 3
+  printPose();
+
+  // Back away before turning toward home
+  // Ensure the space behind robot is clear.
+  Serial.println("Backing away from Tag 3");
+
+  if (!driveDistance(-12.0f)) {
+
+    Serial.println("ERROR: Cannot back away");
+
+    stopDriving();
+    return;
+  }
+
+
+  // Calculate direction and distance home
+  // using the stored encoder-based position.
+
+  Serial.println("Returning to starting position");
+
+  bool homeSuccess = returnHome();
+
+
   // ====================================
   // MISSION COMPLETE
   // ====================================
 
-  // Stop permanently after Tag 3
-  motorHalt(LMOTOR);
-  motorHalt(RMOTOR);
+  stopDriving();
 
-  Serial.println("MILESTONE 2 COMPLETE!");
+  if (homeSuccess) {
+
+    Serial.println("RETURN HOME COMPLETE");
+
+    Serial.println("Starting position estimated");
+    Serial.println("Original heading restored");
+
+  } else {
+
+    Serial.println("ERROR: Return home failed");
+  }
+
+  // Show final estimated X, Y, theta
+  printPose();
+
+  Serial.println("MILESTONE 2 FINISHED");
 }
 
 
 // ====================================
-// LOOP - DO NOT REPEAT THE MISSION
+// LOOP
 // ====================================
 
 void loop() {
 
-  // Keep both motors stopped
+  // Mission runs only once.
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
-
-  // Do not restart the tag sequence
 }
