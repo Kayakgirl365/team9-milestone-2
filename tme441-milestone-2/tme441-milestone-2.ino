@@ -44,6 +44,40 @@ const bool CAMERA_CALIBRATED = false;
 
 
 void setup() {
+initMotors();
+
+motorHalt(LMOTOR);
+motorHalt(RMOTOR);
+  
+  // TEMPORARY MOTOR TEST
+  // Raise the robot so both wheels are off the ground.
+  // Test the same motor directions seen in Serial Monitor.
+
+  Serial.println("Testing motor movement");
+
+  // Record encoder starting positions.
+  long leftStart = enc_l.read();
+  long rightStart = enc_r.read();
+
+  // Run both motors briefly without PID.
+  motorOn(LMOTOR, 180);
+  motorOn(RMOTOR, -180);
+
+  delay(500);  // Only for this temporary diagnostic test
+
+  // Stop both motors.
+  motorHalt(LMOTOR);
+  motorHalt(RMOTOR);
+
+  // Print how far the encoders actually moved.
+  Serial.print("LEFT encoder ticks: ");
+  Serial.println(enc_l.read() - leftStart);
+
+  Serial.print("RIGHT encoder ticks: ");
+  Serial.println(enc_r.read() - rightStart);
+
+  // End the test without starting navigation.
+  return;
 
   // Start computer and HuskyLens communication.
   Serial.begin(9600);
