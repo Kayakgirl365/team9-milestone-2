@@ -40,43 +40,73 @@ bool rotateCCW(float degrees);
 
 // Keep false until camera distance and angle
 // measurements have been calibrated and tested.
-const bool CAMERA_CALIBRATED = false;
+const bool CAMERA_CALIBRATED = true;
 
 
 void setup() {
-initMotors();
 
-motorHalt(LMOTOR);
-motorHalt(RMOTOR);
-  
-  // TEMPORARY MOTOR TEST
-  // Raise the robot so both wheels are off the ground.
-  // Test the same motor directions seen in Serial Monitor.
+void setup() {
 
-  Serial.println("Testing motor movement");
+  // Start Serial Monitor FIRST
+  Serial.begin(9600);
+  delay(1000);
 
-  // Record encoder starting positions.
-  long leftStart = enc_l.read();
-  long rightStart = enc_r.read();
+  // Set up motor pins
+  initMotors();
 
-  // Run both motors briefly without PID.
-  motorOn(LMOTOR, 180);
-  motorOn(RMOTOR, -180);
-
-  delay(500);  // Only for this temporary diagnostic test
-
-  // Stop both motors.
+  // Start with motors stopped
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 
-  // Print how far the encoders actually moved.
-  Serial.print("LEFT encoder ticks: ");
+  Serial.println("Starting motor test");
+
+  // ==========================
+  // TEST LEFT MOTOR
+  // ==========================
+
+  Serial.println("Testing LEFT motor");
+
+  long leftStart = enc_l.read();
+
+  // Run left motor for 2 seconds
+  motorOn(LMOTOR, 180);
+  delay(2000);
+
+  // Stop left motor
+  motorHalt(LMOTOR);
+
+  Serial.print("Left encoder ticks: ");
   Serial.println(enc_l.read() - leftStart);
 
-  Serial.print("RIGHT encoder ticks: ");
+  delay(1000);
+
+  // ==========================
+  // TEST RIGHT MOTOR
+  // ==========================
+
+  Serial.println("Testing RIGHT motor");
+
+  long rightStart = enc_r.read();
+
+  // Run right motor for 2 seconds
+  motorOn(RMOTOR, 180);
+  delay(2000);
+
+  // Stop right motor
+  motorHalt(RMOTOR);
+
+  Serial.print("Right encoder ticks: ");
   Serial.println(enc_r.read() - rightStart);
 
-  // End the test without starting navigation.
+  Serial.println("Motor test complete");
+
+  // Stop here while debugging
+  return;
+  
+  // Your existing camera/navigation code below
+  // will not execute during this test.
+}
+
   return;
 
   // Start computer and HuskyLens communication.
