@@ -5,13 +5,14 @@
 
   camera.ino
 
-  HuskyLens AprilTag detection
-  with Serial Monitor debugging.
+  Measures:
+  - Tag ID
+  - Image X and Y
+  - Tag height and width
+  - Estimated distance
+  - Estimated heading
+  - Horizontal pixel error
 */
-
-// ====================================
-// DEBUG SETTINGS
-// ====================================
 
 const bool CAMERA_DEBUG = true;
 
@@ -20,23 +21,20 @@ const bool CAMERA_DEBUG = true;
 // CAMERA CALIBRATION
 // ====================================
 
-// These are the current GitHub values.
-// Keep your LOCAL calibrated values
-// if you have already improved them.
-
-const float CAMERA_CENTER_X = 160.0f;
-const float CAMERA_FOCAL_PIXELS = 320.0f;
+const float CAMERA_CENTER_X = 165.5f;
+const float CAMERA_FOCAL_PIXELS = 300.4f;
 
 const float CAMERA_YAW_OFFSET_DEG = 0.0f;
 
-const float RANGE_SCALE = 3489.0f;
-const float RANGE_OFFSET_CM = 3.0f;
+const float RANGE_SCALE = 3360.0f;
+const float RANGE_OFFSET_CM = 0.0f;
 
+// Measure from lens to robot front.
 const float CAMERA_TO_FRONT_CM = 0.0f;
 
 
 // ====================================
-// READ APRILTAG
+// READ TARGET APRILTAG
 // ====================================
 
 TagPose rangeAndHeadingToTag(int tagID) {
@@ -45,7 +43,7 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
   bool received = false;
 
-  // Retry communication up to three times
+  // Retry transient camera communication failures.
   for (int attempt = 0; attempt < 3; attempt++) {
 
     if (cam.requestBlocks(tagID)) {
@@ -59,7 +57,7 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
 
   // ====================================
-  // CAMERA COMMUNICATION ERROR
+  // CAMERA ERROR
   // ====================================
 
   if (!received) {
@@ -68,7 +66,7 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
     if (CAMERA_DEBUG) {
 
-      Serial.print("CAMERA ERROR | Tag ");
+      Serial.print(F("CAMERA ERROR | requested Tag "));
       Serial.println(tagID);
     }
 
@@ -77,14 +75,13 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
 
   // ====================================
-  // PROCESS CAMERA BLOCKS
+  // READ CAMERA BLOCKS
   // ====================================
 
   while (cam.available()) {
 
     HUSKYLENSResult block = cam.read();
 
-    // Ignore incorrect tag IDs
     if (block.command != COMMAND_RETURN_BLOCK ||
         block.ID != tagID ||
         block.height <= 0) {
@@ -99,7 +96,7 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
 
     // ====================================
-    // CALCULATE DISTANCE
+    // ESTIMATE DISTANCE
     // ====================================
 
     pose.range =
@@ -108,11 +105,8 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
 
     // ====================================
-    // CALCULATE HEADING
+    // ESTIMATE HEADING
     // ====================================
-
-    // Positive heading = tag to the left
-    // Negative heading = tag to the right
 
     pose.heading =
         atan2f(
@@ -129,38 +123,38 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
     if (CAMERA_DEBUG) {
 
-      Serial.print("CAMERA | t_ms=");
+      Serial.print(F("CAMERA | t_ms="));
       Serial.print(millis());
 
-      Serial.print(" | id=");
+      Serial.print(F(" | id="));
       Serial.print(block.ID);
 
-      Serial.print(" | x_px=");
+      Serial.print(F(" | x_px="));
       Serial.print(block.xCenter);
 
-      Serial.print(" | y_px=");
+      Serial.print(F(" | y_px="));
       Serial.print(block.yCenter);
 
-      Serial.print(" | width_px=");
+      Serial.print(F(" | width_px="));
       Serial.print(block.width);
 
-      Serial.print(" | height_px=");
+      Serial.print(F(" | height_px="));
       Serial.print(block.height);
 
-      Serial.print(" | x_error_px=");
+      Serial.print(F(" | x_error_px="));
       Serial.print(
         block.xCenter - CAMERA_CENTER_X, 1
       );
 
-      Serial.print(" | lens_cm=");
+      Serial.print(F(" | lens_cm="));
       Serial.print(pose.range, 2);
 
-      Serial.print(" | front_cm=");
+      Serial.print(F(" | front_cm="));
       Serial.print(
         pose.range - CAMERA_TO_FRONT_CM, 2
       );
 
-      Serial.print(" | heading_deg=");
+      Serial.print(F(" | heading_deg="));
       Serial.println(pose.heading, 2);
     }
 
@@ -169,14 +163,14 @@ TagPose rangeAndHeadingToTag(int tagID) {
 
 
   // ====================================
-  // TAG NOT DETECTED
+  // TAG NOT VISIBLE
   // ====================================
 
   if (CAMERA_DEBUG) {
 
-    Serial.print("CAMERA | Tag ");
+    Serial.print(F("CAMERA | Tag "));
     Serial.print(tagID);
-    Serial.println(" NOT VISIBLE");
+    Serial.println(F(" NOT VISIBLE"));
   }
 
   return pose;
