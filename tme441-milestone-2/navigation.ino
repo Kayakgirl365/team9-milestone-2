@@ -3,74 +3,75 @@
   TME 441 - Milestone 2
   AC-Team 9
 
-  Find and approach AprilTags using the HuskyLens.
+  navigation.ino
 
-  1. Search for the correct tag.
-  2. Measure range AND heading together.
-  3. Turn toward the tag.
-  4. Confirm alignment and distance.
-  5. Drive the calculated distance ONE time.
-  6. Stop.
+  Find AprilTags 1, 2, and 3.
 
-  No ultrasonic sensor.
+  Search -> Detect -> Calculate heading ->
+  Align -> Drive calculated distance -> Stop.
+
+  Includes Serial Monitor debugging.
 */
 
-// Turn 15 degrees when searching for a tag.
+// ====================================
+// NAVIGATION SETTINGS
+// ====================================
+
 const float SEARCH_TURN_DEG = 15.0f;
 
-// Accept a heading error of 4 degrees.
 const float HEADING_TOLERANCE_DEG = 4.0f;
 
-// Do not pivot too close to a sign.
 const float MIN_PIVOT_GAP_CM = 15.0f;
 
-// Desired stopping distance from the front of robot.
 const float STOP_GAP_CM = 8.5f;
 
-// Reject unreasonable camera distances.
 const float MAX_VALID_GAP_CM = 250.0f;
 
-// Maximum search time.
 const unsigned long SEARCH_TIMEOUT_MS = 90000UL;
 
 
-// Stop motors if something goes wrong.
+// ====================================
+// ERROR HANDLING
+// ====================================
+
 int stopTagWithError(int status) {
 
   stopDriving();
+
+  Serial.print("NAVIGATION ERROR: ");
+  Serial.println(status);
 
   return status;
 }
 
 
-// Find and approach the specified tag.
-//
-// Returns:
-//  1 = Estimated approach completed
-// -1 = Tag not found
-// -2 = Camera communication error
-// -3 = Motor, encoder, or distance error
+// ====================================
+// DRIVE TO SPECIFIED TAG
+// ====================================
+
 int driveToTag(int tagID) {
 
   unsigned long startTime = millis();
   int searchTurns = 0;
 
-  // ===================================
-  // STEP 1: FIND THE TAG
-  // ===================================
+  Serial.print("STARTING SEARCH FOR TAG ");
+  Serial.println(tagID);
 
-  // Get the tag's range and heading together.
+
+  // ====================================
+  // STEP 1: FIND THE TAG
+  // ====================================
+
   TagPose tag = rangeAndHeadingToTag(tagID);
 
-  // Search while the tag is not visible.
   while (tag.status == 0 &&
          searchTurns < 24 &&
          millis() - startTime < SEARCH_TIMEOUT_MS) {
 
-    Serial.print("Searching for Tag ");
-    Serial.println(tagID);
+    Serial.print("Search rotation ");
+    Serial.print(searchTurns + 1);
+    Serial.println(" | Turning 15 degrees");
 
-    // Rotate 15 degrees to look for the tag.
     if (!rotateCCW(SEARCH_TURN_DEG)) {
 
       Serial.println("ERROR: Search rotation failed");
@@ -79,68 +80,66 @@ int driveToTag(int tagID) {
 
     searchTurns++;
 
-    // Allow camera image to settle.
     delay(100);
 
-    // Check for the tag again.
     tag = rangeAndHeadingToTag(tagID);
   }
 
-  // Stop if the camera connection failed.
   if (tag.status == -2) {
     return stopTagWithError(-2);
   }
 
-  // Stop if we could not find the correct tag.
   if (tag.status != 1) {
+    Serial.println("ERROR: Tag not found");
     return stopTagWithError(-1);
   }
 
-  // ===================================
-  // STEP 2: MEASURE RANGE AND HEADING
-  // ===================================
 
-  Serial.print("Tag found! Range: ");
-  Serial.print(distanceFromFront(tag));
+  // ====================================
+  // STEP 2: TAG DETECTED
+  // ====================================
 
-  Serial.print(" cm | Heading: ");
-  Serial.println(tag.heading);
+  Serial.print("TAG FOUND: ");
+  Serial.println(tagID);
+
+  Serial.print("Initial Distance (cm): ");
+  Serial.println(distanceFromFront(tag), 2);
+
+  Serial.print("Initial Heading (deg): ");
+  Serial.println(tag.heading, 2);
 
 
-  // ===================================
-  // STEP 3: TURN TOWARD THE TAG
-  // ===================================
+  // ====================================
+  // STEP 3: ALIGN WITH THE TAG
+  // ====================================
 
-  // Allow up to two alignment corrections.
-  // Each turn uses the camera's measured angle.
   for (int correction = 0; correction < 2; correction++) {
 
     float gap = distanceFromFront(tag);
 
-    // Reject invalid distance estimates.
     if (gap <= 0.0f || gap > MAX_VALID_GAP_CM) {
 
       Serial.println("ERROR: Invalid camera range");
       return stopTagWithError(-3);
     }
 
-    // Stop turning when the tag is centered.
+    // Stop turning once heading is acceptable.
     if (fabsf(tag.heading) <= HEADING_TOLERANCE_DEG) {
+
+      Serial.println("Tag alignment acceptable");
       break;
     }
 
-    // Avoid pivoting beside the sign.
     if (gap < MIN_PIVOT_GAP_CM) {
 
       Serial.println("ERROR: Too close to turn");
       return stopTagWithError(-3);
     }
 
-    Serial.print("Turning: ");
-    Serial.println(tag.heading);
+    Serial.print("Alignment Correction (deg): ");
+    Serial.println(tag.heading, 2);
 
-    // Rotate the angle calculated by the camera.
-    // Positive = CCW, negative = CW.
+    // Turn toward the tag.
     if (!rotateCCW(tag.heading)) {
 
       Serial.println("ERROR: Alignment failed");
@@ -149,15 +148,13 @@ int driveToTag(int tagID) {
 
     delay(100);
 
-    // Get a fresh distance and heading after turning.
+    // Recheck camera after turning.
     tag = rangeAndHeadingToTag(tagID);
 
-    // Stop on camera communication failure.
     if (tag.status == -2) {
       return stopTagWithError(-2);
     }
 
-    // Do not drive if the tag disappeared.
     if (tag.status != 1) {
 
       Serial.println("ERROR: Lost tag after turning");
@@ -166,70 +163,86 @@ int driveToTag(int tagID) {
   }
 
 
-  // ===================================
-  // STEP 4: CHECK FINAL ALIGNMENT
-  // ===================================
+  // ====================================
+  // STEP 4: VERIFY ALIGNMENT
+  // ====================================
 
-  // Do not drive if the tag is still off-center.
   if (fabsf(tag.heading) > HEADING_TOLERANCE_DEG) {
 
-    Serial.println("ERROR: Tag not aligned");
+    Serial.println("ERROR: Heading outside tolerance");
     return stopTagWithError(-3);
   }
 
-  // Distance from front of robot to sign.
   float gap = distanceFromFront(tag);
 
-  // Reject invalid distance estimates.
   if (gap <= 0.0f || gap > MAX_VALID_GAP_CM) {
 
     Serial.println("ERROR: Invalid final distance");
     return stopTagWithError(-3);
   }
 
-  // Stop if the tag is already very close.
   if (gap < 4.5f) {
 
     Serial.println("ERROR: Tag is too close");
     return stopTagWithError(-3);
   }
 
-  // Already at the estimated stopping distance.
+
+  // ====================================
+  // STEP 5: CALCULATE APPROACH
+  // ====================================
+
+  Serial.println("===== FINAL CAMERA MEASUREMENT =====");
+
+  Serial.print("Target Tag ID: ");
+  Serial.println(tagID);
+
+  Serial.print("Estimated Front Gap (cm): ");
+  Serial.println(gap, 2);
+
+  Serial.print("Final Heading Error (deg): ");
+  Serial.println(tag.heading, 2);
+
+  Serial.println("Robot Position Before Approach:");
+  printPose();
+
+  // Already at desired stopping distance.
   if (gap <= STOP_GAP_CM) {
 
     stopDriving();
     return 1;
   }
 
-
-  // ===================================
-  // STEP 5: DRIVE TO THE TAG
-  // ===================================
-
-  // Calculate how far to drive.
   float driveCm = gap - STOP_GAP_CM;
 
-  Serial.print("Driving forward: ");
-  Serial.print(driveCm);
-  Serial.println(" cm");
+  Serial.print("Calculated Driving Distance (cm): ");
+  Serial.println(driveCm, 2);
 
-  // Drive the entire calculated distance ONCE.
-  // Your existing PID and slew profile control speed.
+  Serial.println("====================================");
+
+
+  // ====================================
+  // STEP 6: DRIVE ONCE TO TARGET
+  // ====================================
+
   if (!driveDistance(driveCm)) {
 
     Serial.println("ERROR: Forward movement failed");
     return stopTagWithError(-3);
   }
 
-
-  // ===================================
-  // STEP 6: STOP
-  // ===================================
-
   stopDriving();
 
-  Serial.print("Approach complete for Tag ");
+
+  // ====================================
+  // STEP 7: PRINT FINAL POSITION
+  // ====================================
+
+  Serial.print("APPROACH COMPLETE | TAG ");
   Serial.println(tagID);
+
+  Serial.println("Robot Position After Approach:");
+  printPose();
 
   return 1;
 }
