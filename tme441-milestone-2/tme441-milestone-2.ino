@@ -4,13 +4,13 @@
   AC-Team 9
 
   Mission:
-  1. Find Tag 1
-  2. Find Tag 2
-  3. Find Tag 3
-  4. Return to starting position
-  5. Restore starting heading
+  1. Find and approach Tag 1.
+  2. Find and approach Tag 2.
+  3. Find and approach Tag 3.
+  4. Return to starting position.
+  5. Restore original heading.
 
-  Uses updated camera alignment.
+  Continuous camera-guided steering.
 */
 
 #include <Encoder.h>
@@ -22,7 +22,7 @@ HUSKYLENS cam;
 
 
 // ====================================
-// CAMERA DATA STRUCTURE
+// TAG DATA STRUCTURE
 // ====================================
 
 struct TagPose {
@@ -48,7 +48,6 @@ int driveToTag(int tagID);
 
 bool driveDistance(float cm);
 bool rotateCCW(float degrees);
-
 void stopDriving();
 
 void resetOdometry();
@@ -63,7 +62,10 @@ bool returnHome();
 
 void setup() {
 
-  Serial.begin(9600);
+  // USB Serial Monitor
+  Serial.begin(115200);
+
+  // HuskyLens communication
   Serial3.begin(9600);
 
   initMotors();
@@ -86,7 +88,7 @@ void setup() {
 
 
   // ====================================
-  // INITIALIZE HUSKYLENS
+  // CONNECT HUSKYLENS
   // ====================================
 
   if (!cam.begin(Serial3)) {
@@ -105,7 +107,7 @@ void setup() {
 
 
   // ====================================
-  // TRACK APRILTAGS 1, 2, AND 3
+  // FIND TAGS 1, 2, AND 3
   // ====================================
 
   for (int tagID = 1; tagID <= 3; tagID++) {
@@ -113,7 +115,8 @@ void setup() {
     Serial.print("Searching for Tag ");
     Serial.println(tagID);
 
-    // Uses updated navigation.ino
+    // Search, align, then continuously
+    // steer toward the tag.
     int result = driveToTag(tagID);
 
     stopDriving();
@@ -140,7 +143,9 @@ void setup() {
 
     if (tagID < 3) {
 
-      Serial.println("Backing away from tag: 9 cm");
+      Serial.println(
+        "Backing away from tag: 9 cm"
+      );
 
       if (!driveDistance(-9.0f)) {
 
@@ -156,7 +161,7 @@ void setup() {
 
 
   // ====================================
-  // EXTRA LABOR: RETURN HOME
+  // RETURN HOME AFTER TAG 3
   // ====================================
 
   Serial.println(
@@ -165,7 +170,7 @@ void setup() {
 
   printPose();
 
-  // Back away before turning toward home
+  // Back away before the homeward turn.
   if (!driveDistance(-12.0f)) {
 
     Serial.println(
@@ -183,7 +188,6 @@ void setup() {
     );
 
     stopDriving();
-
     printPose();
 
     return;
@@ -191,7 +195,7 @@ void setup() {
 
 
   // ====================================
-  // FINISH MISSION
+  // FINISH
   // ====================================
 
   stopDriving();
@@ -210,7 +214,7 @@ void setup() {
 
 void loop() {
 
+  // Mission runs once.
   motorHalt(LMOTOR);
   motorHalt(RMOTOR);
 }
-
